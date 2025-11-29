@@ -2,9 +2,10 @@ import streamlit as st
 import pdfplumber
 import json
 import google.generativeai as genai
+import time
 
 # --- تنظیمات صفحه ---
-st.set_page_config(page_title="ابزار پکیج طاهاگشت (نسخه جمینای)", layout="wide", page_icon="💎")
+st.set_page_config(page_title="ابزار پکیج طاهاگشت", layout="wide", page_icon="💎")
 
 # استایل برای راست‌چین کردن متن‌ها
 st.markdown("""
@@ -22,11 +23,25 @@ with st.sidebar:
     target_year = st.number_input("سال برگزاری تور (شمسی)", min_value=1403, max_value=1410, value=1404)
     
     # دریافت API Key گوگل
-    # اولویت با Secrets است، اگر نبود از ورودی متنی می‌خواند
     try:
         api_key = st.secrets["GOOGLE_API_KEY"]
+        st.success("✅ کلید API شناسایی شد")
     except:
         api_key = st.text_input("کلید API گوگل (Gemini) را وارد کنید", type="password")
+
+    st.divider()
+    # دکمه عیب‌یابی برای دیدن مدل‌های فعال
+    if st.button("🔍 تست اتصال و نمایش مدل‌ها"):
+        if not api_key:
+            st.error("کلید API وارد نشده است.")
+        else:
+            try:
+                genai.configure(api_key=api_key)
+                st.info("در حال دریافت لیست مدل‌های مجاز...")
+                models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+                st.code(models)
+            except Exception as e:
+                st.error(f"خطا: {e}")
 
 # --- تابع استخراج متن ---
 def extract_text_from_pdf(file):
@@ -38,12 +53,10 @@ def extract_text_from_pdf(file):
                 text += extracted + "\n"
     return text
 
-# --- تابع اتصال به Gemini ---
+# --- تابع اتصال به Gemini با مکانیزم فال‌بک (Fallback) ---
 def analyze_with_gemini(text, year, api_key):
-    # تنظیمات مدل
     genai.configure(api_key=api_key)
     
-    # پرامپت سیستمی (دستورالعمل اصلی)
     system_instruction = f"""
     تو یک دستیار متخصص برای آژانس مسافرتی «طاهاگشت» هستی.
     ورودی: متن خام یک فایل PDF تور.
@@ -66,26 +79,48 @@ def analyze_with_gemini(text, year, api_key):
     }}
     """
 
-    # انتخاب مدل (Flash برای سرعت و قیمت عالی است)
-    model = genai.GenerativeModel(
-        model_name="gemini-1.5-flash",
-        system_instruction=system_instruction,
-        generation_config={"response_mime_type": "application/json"} # تضمین خروجی JSON
-    )
+    # لیست مدل‌هایی که به ترتیب امتحان می‌شوند تا یکی کار کند
+    candidate_models = [
+        "gemini-1.5-flash",
+        "gemini-1.5-flash-latest",
+        "gemini-1.5-flash-001",
+        "gemini-1.5-pro",
+        "gemini-pro"
+    ]
 
-    # ارسال درخواست
-    response = model.generate_content(f"این متن کامل PDF است، لطفاً تحلیل کن:\n\n{text}")
+    last_error = None
+
+    for model_name in candidate_models:
+        try:
+            # تلاش برای ساخت مدل با نام فعلی
+            model = genai.GenerativeModel(
+                model_name=model_name,
+                system_instruction=system_instruction,
+                generation_config={"response_mime_type": "application/json"}
+            )
+            
+            # ارسال درخواست
+            response = model.generate_content(f"این متن کامل PDF است، لطفاً تحلیل کن:\n\n{text}")
+            
+            # اگر موفق شد، خروجی را برمی‌گرداند
+            return json.loads(response.text)
+            
+        except Exception as e:
+            # اگر خطا داد، مدل بعدی را امتحان می‌کنیم
+            last_error = e
+            continue
     
-    return json.loads(response.text)
+    # اگر همه مدل‌ها خطا دادند
+    raise last_error
 
 # --- بدنه اصلی رابط کاربری ---
 uploaded_file = st.file_uploader("فایل PDF را اینجا بارگذاری کنید", type="pdf")
 
-if uploaded_file and st.button("شروع پردازش با Gemini"):
+if uploaded_file and st.button("شروع پردازش"):
     if not api_key:
-        st.error("لطفا ابتدا API Key را وارد کنید (یا در تنظیمات Secrets ذخیره کنید).")
+        st.error("لطفا ابتدا API Key را وارد کنید.")
     else:
-        with st.spinner('جمینای در حال مطالعه فایل و محاسبه تاریخ‌ها...'):
+        with st.spinner('در حال آنالیز متن و تبدیل تاریخ‌ها...'):
             try:
                 # 1. خواندن PDF
                 raw_text = extract_text_from_pdf(uploaded_file)
@@ -96,7 +131,6 @@ if uploaded_file and st.button("شروع پردازش با Gemini"):
                 # 3. نمایش نتایج
                 st.success("انجام شد!")
                 
-                # هدر گزارش
                 col1, col2 = st.columns([3, 1])
                 with col1:
                     st.subheader(f"🏷️ {data.get('tour_title', 'بدون عنوان')}")
@@ -104,8 +138,7 @@ if uploaded_file and st.button("شروع پردازش با Gemini"):
                     fl = data.get('flight_info', {})
                     st.info(f"پرواز: {fl.get('shamsi', '-')} \n({fl.get('gregorian', '-')})")
                 
-                # تب‌بندی
-                tab_preview, tab_copy = st.tabs(["بازبینی دقیق (جدول)", "متن نهایی (سایت)"])
+                tab_preview, tab_copy = st.tabs(["بازبینی دقیق", "متن نهایی سایت"])
                 
                 with tab_preview:
                     for day in data.get('itinerary', []):
@@ -117,7 +150,8 @@ if uploaded_file and st.button("شروع پردازش با Gemini"):
                     for day in data.get('itinerary', []):
                         final_text += f"📅 {day['date_gregorian']} | {day['day_title']}\n{day['content_summary']}\n\n"
                     
-                    st.text_area("متن آماده کپی برای ادمین:", value=final_text, height=600)
+                    st.text_area("متن آماده کپی:", value=final_text, height=600)
             
             except Exception as e:
                 st.error(f"خطا در پردازش: {e}")
+                st.warning("پیشنهاد: از دکمه «تست اتصال» در منوی سمت راست استفاده کنید تا مطمئن شوید کلید شما سالم است.")
