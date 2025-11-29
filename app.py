@@ -121,11 +121,3 @@ if uploaded_file and st.button("شروع پردازش با Gemini"):
             
             except Exception as e:
                 st.error(f"خطا در پردازش: {e}")
-```
-
-### چک‌لیست نهایی (برای اطمینان):
-1.  **فایل `requirements.txt`:** حتماً مطمئن شوید که محتوای آن دقیقاً این سه خط است (به خصوص نسخه گوگل):
-    ```text
-    streamlit
-    pdfplumber
-    google-generativeai==0.8.3
