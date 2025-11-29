@@ -1,6 +1,7 @@
 import streamlit as st
 import json
 import google.generativeai as genai
+import time
 
 # --- تنظیمات صفحه ---
 st.set_page_config(page_title="ابزار پکیج طاهاگشت", layout="wide", page_icon="💎")
@@ -14,7 +15,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-st.title("💎 تبدیل هوشمند پکیج (موتور ویژن)")
+st.title("💎 تبدیل هوشمند پکیج (موتور ویژن پایدار)")
 st.markdown("این نسخه از **چشم‌های هوش مصنوعی** استفاده می‌کند و می‌تواند فایل‌های اسکن‌شده و عکس‌دار را هم بخواند.")
 
 # --- سایدبار ---
@@ -28,7 +29,7 @@ with st.sidebar:
     except:
         api_key = st.text_input("کلید API گوگل را وارد کنید", type="password")
 
-# --- تابع اتصال به Gemini (ارسال مستقیم فایل) ---
+# --- تابع اتصال به Gemini (ارسال مستقیم فایل با تلاش مجدد) ---
 def analyze_pdf_directly(file_bytes, year, api_key):
     genai.configure(api_key=api_key)
     
@@ -53,12 +54,14 @@ def analyze_pdf_directly(file_bytes, year, api_key):
     }}
     """
 
-    # مدل‌های پیشنهادی (مدل‌های فلش برای پردازش فایل عالی هستند)
-    model = genai.GenerativeModel(
-        model_name="gemini-2.0-flash-exp", # یا gemini-1.5-flash
-        system_instruction=system_instruction,
-        generation_config={"response_mime_type": "application/json"}
-    )
+    # لیست اولویت‌بندی شده مدل‌ها (بر اساس لیست مجاز شما)
+    # مدل 2.5 فلش اولویت دارد چون پایدارتر است
+    candidate_models = [
+        "gemini-2.5-flash",          # بهترین گزینه فعلی
+        "gemini-flash-latest",       # فال‌بک مطمئن
+        "gemini-2.0-flash-exp",      # آزمایشی (ممکن است محدود باشد)
+        "gemini-1.5-pro-latest"      # آخرین سنگر
+    ]
     
     # ساخت پکیج دیتا برای ارسال مستقیم PDF
     pdf_part = {
@@ -66,18 +69,41 @@ def analyze_pdf_directly(file_bytes, year, api_key):
         "data": file_bytes
     }
     
-    # ارسال پرامپت + فایل PDF
-    try:
-        response = model.generate_content(["Extract tour details from this document.", pdf_part])
-        return response.text
-    except Exception as e:
-        # اگر مدل 2.0 در دسترس نبود، با مدل 1.5 تست کن
+    last_error = None
+
+    # حلقه تلاش برای مدل‌های مختلف
+    for model_name in candidate_models:
         try:
-            fallback_model = genai.GenerativeModel(model_name="gemini-1.5-flash", system_instruction=system_instruction, generation_config={"response_mime_type": "application/json"})
-            response = fallback_model.generate_content(["Extract tour details from this document.", pdf_part])
+            # ساخت مدل
+            model = genai.GenerativeModel(
+                model_name=model_name,
+                system_instruction=system_instruction,
+                generation_config={"response_mime_type": "application/json"}
+            )
+            
+            # تلاش برای ارسال
+            response = model.generate_content(["Extract tour details from this document.", pdf_part])
             return response.text
-        except Exception as e2:
-            return f"ERROR: {str(e)} | Fallback Error: {str(e2)}"
+            
+        except Exception as e:
+            error_str = str(e)
+            last_error = e
+            
+            # اگر خطای محدودیت (429) بود، کمی صبر کن و برو بعدی
+            if "429" in error_str or "Quota" in error_str:
+                time.sleep(2) # 2 ثانیه استراحت
+                continue
+            
+            # اگر خطای پیدا نشدن مدل (404) بود، سریع برو بعدی
+            if "404" in error_str or "not found" in error_str:
+                continue
+                
+            # سایر خطاها
+            print(f"Model {model_name} failed: {e}")
+            continue
+
+    # اگر هیچکدام کار نکرد
+    return f"ERROR: All models failed. Last error: {str(last_error)}"
 
 # --- بدنه اصلی ---
 uploaded_file = st.file_uploader("فایل PDF (حتی اسکن شده) را آپلود کنید", type="pdf")
@@ -124,6 +150,7 @@ if uploaded_file and st.button("شروع پردازش"):
                     st.error("❌ خطا در فرمت خروجی")
                     if "ERROR:" in raw_response:
                         st.error(raw_response)
+                        st.info("نکته: خطای Quota یعنی درخواست‌های زیادی ارسال شده. چند لحظه صبر کنید و دوباره امتحان کنید.")
                     else:
                         st.code(raw_response)
                         
