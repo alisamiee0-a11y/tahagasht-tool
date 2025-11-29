@@ -2,7 +2,6 @@ import streamlit as st
 import pdfplumber
 import json
 import google.generativeai as genai
-from google.api_core import retry
 
 # --- تنظیمات صفحه ---
 st.set_page_config(page_title="ابزار پکیج طاهاگشت (نسخه جمینای)", layout="wide", page_icon="💎")
@@ -23,7 +22,7 @@ with st.sidebar:
     target_year = st.number_input("سال برگزاری تور (شمسی)", min_value=1403, max_value=1410, value=1404)
     
     # دریافت API Key گوگل
-    # اگر در secrets ذخیره کرده باشید خودش می‌خواند، وگرنه از کاربر می‌گیرد
+    # اولویت با Secrets است، اگر نبود از ورودی متنی می‌خواند
     try:
         api_key = st.secrets["GOOGLE_API_KEY"]
     except:
@@ -84,7 +83,7 @@ uploaded_file = st.file_uploader("فایل PDF را اینجا بارگذاری 
 
 if uploaded_file and st.button("شروع پردازش با Gemini"):
     if not api_key:
-        st.error("لطفا ابتدا API Key را وارد کنید.")
+        st.error("لطفا ابتدا API Key را وارد کنید (یا در تنظیمات Secrets ذخیره کنید).")
     else:
         with st.spinner('جمینای در حال مطالعه فایل و محاسبه تاریخ‌ها...'):
             try:
@@ -121,6 +120,12 @@ if uploaded_file and st.button("شروع پردازش با Gemini"):
                     st.text_area("متن آماده کپی برای ادمین:", value=final_text, height=600)
             
             except Exception as e:
+                st.error(f"خطا در پردازش: {e}")
+```
 
-                st.error(f"خطا در ارتباط با گوگل: {e}")
-
+### چک‌لیست نهایی (برای اطمینان):
+1.  **فایل `requirements.txt`:** حتماً مطمئن شوید که محتوای آن دقیقاً این سه خط است (به خصوص نسخه گوگل):
+    ```text
+    streamlit
+    pdfplumber
+    google-generativeai==0.8.3
