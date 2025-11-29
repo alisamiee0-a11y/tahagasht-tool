@@ -2,46 +2,31 @@ import streamlit as st
 import pdfplumber
 import json
 import google.generativeai as genai
-import time
 
 # --- تنظیمات صفحه ---
 st.set_page_config(page_title="ابزار پکیج طاهاگشت", layout="wide", page_icon="💎")
 
-# استایل برای راست‌چین کردن متن‌ها
+# استایل برای راست‌چین کردن
 st.markdown("""
 <style>
     .stTextArea textarea { direction: rtl; }
     div[data-testid="stExpander"] div[role="button"] p { direction: rtl; }
+    .stAlert { direction: rtl; }
 </style>
 """, unsafe_allow_html=True)
 
-st.title("💎 تبدیل هوشمند پکیج (با موتور Gemini 2.5)")
+st.title("💎 تبدیل هوشمند پکیج (عیب‌یابی پیشرفته)")
 
 # --- سایدبار ---
 with st.sidebar:
     st.header("تنظیمات ورودی")
     target_year = st.number_input("سال برگزاری تور (شمسی)", min_value=1403, max_value=1410, value=1404)
     
-    # دریافت API Key گوگل
     try:
         api_key = st.secrets["GOOGLE_API_KEY"]
         st.success("✅ کلید API شناسایی شد")
     except:
-        api_key = st.text_input("کلید API گوگل (Gemini) را وارد کنید", type="password")
-
-    st.divider()
-    # دکمه عیب‌یابی (کوچک شده)
-    with st.expander("🛠️ ابزار عیب‌یابی"):
-        if st.button("نمایش مدل‌های فعال"):
-            if not api_key:
-                st.error("کلید موجود نیست")
-            else:
-                try:
-                    genai.configure(api_key=api_key)
-                    models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
-                    st.code(models)
-                except Exception as e:
-                    st.error(f"خطا: {e}")
+        api_key = st.text_input("کلید API گوگل را وارد کنید", type="password")
 
 # --- تابع استخراج متن ---
 def extract_text_from_pdf(file):
@@ -53,84 +38,72 @@ def extract_text_from_pdf(file):
                 text += extracted + "\n"
     return text
 
-# --- تابع اتصال به Gemini با مدل‌های جدید ---
+# --- تابع اتصال به Gemini ---
 def analyze_with_gemini(text, year, api_key):
     genai.configure(api_key=api_key)
     
     system_instruction = f"""
-    تو یک دستیار متخصص برای آژانس مسافرتی «طاهاگشت» هستی.
-    ورودی: متن خام یک فایل PDF تور.
-    سال تور: {year}
+    You are a data extraction assistant for a travel agency called "TahaGasht".
+    Tour Year: {year}
     
-    وظایف تو:
-    1. بخش "پرواز رفت" را پیدا کن و تاریخ شمسی آن را استخراج کن.
-    2. آن تاریخ را دقیق به میلادی تبدیل کن (این می‌شود تاریخ مرجع).
-    3. برنامه سفر (Itinerary) را بخوان. برای هر روز، تاریخ میلادی آن را محاسبه کن (روز اول معمولاً همان تاریخ پرواز است، مگر اینکه پرواز شبانه باشد و رسیدن به مقصد روز بعد باشد).
-    4. عنوان تور را استخراج کن.
+    Task: Extract flight date (convert to Gregorian), tour title, and daily itinerary.
     
-    خروجی تو باید فقط و فقط یک JSON معتبر باشد با این فیلدها:
+    CRITICAL: Output MUST be valid JSON only. Do not add markdown like ```json ... ```.
+    
+    JSON Structure:
     {{
-      "tour_title": "عنوان تور",
-      "flight_info": {{ "shamsi": "DD Month", "gregorian": "YYYY-MM-DD" }},
+      "tour_title": "string",
+      "flight_info": {{ "shamsi": "string", "gregorian": "YYYY-MM-DD" }},
       "itinerary": [
-        {{ "day_number": 1, "date_gregorian": "YYYY-MM-DD", "day_title": "...", "content_summary": "..." }},
-        ...
+        {{ "day_number": 1, "date_gregorian": "YYYY-MM-DD", "day_title": "string", "content_summary": "string" }}
       ]
     }}
     """
 
-    # لیست مدل‌های موجود در اکانت شما (آپدیت شده)
-    candidate_models = [
-        "gemini-2.5-flash",          # انتخاب اول: جدیدترین و سریعترین
-        "gemini-flash-latest",       # انتخاب دوم: نسخه پایدار
-        "gemini-2.0-flash",          # انتخاب سوم
-        "gemini-pro-latest"          # انتخاب آخر
-    ]
-
-    last_error = None
-
-    for model_name in candidate_models:
-        try:
-            # تلاش برای ساخت مدل با نام فعلی
-            model = genai.GenerativeModel(
-                model_name=model_name,
-                system_instruction=system_instruction,
-                generation_config={"response_mime_type": "application/json"}
-            )
-            
-            # ارسال درخواست
-            response = model.generate_content(f"این متن کامل PDF است، لطفاً تحلیل کن:\n\n{text}")
-            
-            # اگر موفق شد، خروجی را برمی‌گرداند
-            return json.loads(response.text)
-            
-        except Exception as e:
-            # لاگ کردن خطای مدل فعلی (برای دیباگ در کنسول سرور)
-            print(f"Model {model_name} failed: {e}")
-            last_error = e
-            continue
+    # استفاده از مدلی که در لیست شما وجود داشت و قوی است
+    # مدل gemini-2.5-flash هم سریع است هم هوشمند
+    model = genai.GenerativeModel(
+        model_name="gemini-2.5-flash", 
+        system_instruction=system_instruction,
+        generation_config={"response_mime_type": "application/json"}
+    )
     
-    # اگر همه مدل‌ها خطا دادند
-    raise last_error
+    try:
+        response = model.generate_content(f"Extract info from this PDF content:\n\n{text}")
+        return response.text # بازگرداندن متن خام برای بررسی
+    except Exception as e:
+        return f"ERROR: {str(e)}"
 
-# --- بدنه اصلی رابط کاربری ---
-uploaded_file = st.file_uploader("فایل PDF را اینجا بارگذاری کنید", type="pdf")
+# --- بدنه اصلی ---
+uploaded_file = st.file_uploader("فایل PDF را آپلود کنید", type="pdf")
 
 if uploaded_file and st.button("شروع پردازش"):
     if not api_key:
-        st.error("لطفا ابتدا API Key را وارد کنید.")
+        st.error("کلید API وارد نشده است.")
     else:
-        with st.spinner('در حال آنالیز متن و تبدیل تاریخ‌ها...'):
+        with st.spinner('در حال خواندن فایل و پردازش...'):
+            # 1. خواندن PDF
+            raw_text = extract_text_from_pdf(uploaded_file)
+            
+            # --- چک کردن اینکه آیا PDF متن دارد؟ ---
+            if not raw_text or len(raw_text.strip()) < 10:
+                st.error("❌ خطا: هیچ متنی از این PDF استخراج نشد!")
+                st.warning("به نظر می‌رسد این فایل «اسکن» یا «عکس» است. این برنامه فقط روی PDFهایی کار می‌کند که متن آنها قابل کپی کردن باشد.")
+                st.stop() # توقف برنامه
+            
+            # نمایش بخشی از متن برای اطمینان کاربر
+            with st.expander("متن استخراج شده از PDF (چک کنید درست باشد)"):
+                st.text(raw_text[:1000])
+
+            # 2. ارسال به AI
+            raw_response = analyze_with_gemini(raw_text, target_year, api_key)
+            
+            # 3. تلاش برای تبدیل به JSON
             try:
-                # 1. خواندن PDF
-                raw_text = extract_text_from_pdf(uploaded_file)
+                data = json.loads(raw_response)
+                st.success("✅ پردازش موفق بود!")
                 
-                # 2. فراخوانی Gemini
-                data = analyze_with_gemini(raw_text, target_year, api_key)
-                
-                # 3. نمایش نتایج
-                st.success("انجام شد!")
-                
+                # نمایش خروجی نهایی
                 col1, col2 = st.columns([3, 1])
                 with col1:
                     st.subheader(f"🏷️ {data.get('tour_title', 'بدون عنوان')}")
@@ -138,19 +111,22 @@ if uploaded_file and st.button("شروع پردازش"):
                     fl = data.get('flight_info', {})
                     st.info(f"پرواز: {fl.get('shamsi', '-')} \n({fl.get('gregorian', '-')})")
                 
-                tab_preview, tab_copy = st.tabs(["بازبینی دقیق", "متن نهایی سایت"])
-                
-                with tab_preview:
-                    for day in data.get('itinerary', []):
-                        with st.expander(f"روز {day['day_number']}: {day['day_title']} ({day['date_gregorian']})"):
-                            st.write(day['content_summary'])
-                
-                with tab_copy:
-                    final_text = ""
-                    for day in data.get('itinerary', []):
-                        final_text += f"📅 {day['date_gregorian']} | {day['day_title']}\n{day['content_summary']}\n\n"
+                final_text = ""
+                for day in data.get('itinerary', []):
+                    d_date = day.get('date_gregorian', '-')
+                    d_title = day.get('day_title', '')
+                    d_content = day.get('content_summary', '')
                     
-                    st.text_area("متن آماده کپی:", value=final_text, height=600)
-            
+                    with st.expander(f"روز {day.get('day_number')}: {d_title}"):
+                        st.write(d_content)
+                    
+                    final_text += f"📅 {d_date} | {d_title}\n{d_content}\n\n"
+                
+                st.text_area("متن نهایی برای کپی:", value=final_text, height=600)
+                
+            except json.JSONDecodeError:
+                st.error("❌ خطا در ساختار خروجی هوش مصنوعی")
+                st.warning("هوش مصنوعی پاسخ داد، اما فرمت آن JSON استاندارد نبود. پاسخ خام را در زیر ببینید:")
+                st.code(raw_response)
             except Exception as e:
-                st.error(f"خطا در پردازش: {e}")
+                st.error(f"خطای غیرمنتظره: {e}")
