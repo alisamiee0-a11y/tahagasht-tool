@@ -13,16 +13,34 @@ CUSTOM_CSS = """
 <style>
     /* لینک مستقیم و پایدار گوگل فونت (وزیرمتن) */
     @import url('https://fonts.googleapis.com/css2?family=Vazirmatn:wght@100..900&display=swap');
+    
+    /* لینک فونت آیکون‌های گوگل (برای اطمینان از لود شدن آیکون‌ها) */
+    @import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,400,0,0');
 
-    /* 1. تنظیمات فونت هوشمند (اصلاح شده برای رفع باگ آیکون‌ها) */
-    /* فونت را فقط به المان‌های متنی اصلی می‌دهیم، نه همه چیز (div/span) */
+    /* 1. تنظیمات فونت هوشمند (اصلاح نهایی) */
+    
+    /* اعمال فونت وزیر به بدنه اصلی (بدون !important تا آیکون‌ها بتوانند اورراید کنند) */
     html, body, .stApp {
-        font-family: 'Vazirmatn', sans-serif !important;
+        font-family: 'Vazirmatn', sans-serif;
     }
     
-    h1, h2, h3, h4, h5, h6, p, li, a, button, input, textarea, label, .stMarkdown, .stText, .stCode {
+    /* اعمال اجباری فونت فقط به المان‌های متنی */
+    h1, h2, h3, h4, h5, h6, p, li, a, button, input, textarea, label, .stMarkdown, .stText, .stCode, .stSelectbox {
         font-family: 'Vazirmatn', sans-serif !important;
         direction: rtl;
+    }
+
+    /* محافظت از آیکون‌های استریم‌لیت (رفع باگ keyboard_arrow_right) */
+    /* این کلاس‌ها معمولاً برای آیکون‌های متریال استفاده می‌شوند */
+    .material-symbols-rounded, .material-icons, div[data-testid="stExpander"] summary span {
+        font-family: 'Material Symbols Rounded', sans-serif !important;
+        direction: ltr !important; /* آیکون‌ها نباید راست‌چین شوند */
+    }
+    
+    /* استثنا: متن داخل خلاصه Expander باید فونت فارسی داشته باشد */
+    div[data-testid="stExpander"] summary p {
+        font-family: 'Vazirmatn', sans-serif !important;
+        direction: rtl !important;
     }
 
     /* حذف هدر و فوتر پیش‌فرض */
@@ -56,7 +74,7 @@ CUSTOM_CSS = """
 
     /* 3. تایپوگرافی */
     h1, h2, h3 { color: #ffffff !important; font-weight: 800 !important; }
-    p, label, span, div { color: #e2e8f0; } /* div و span بدون important برای حفظ آیکون‌ها */
+    p, label, span, div { color: #e2e8f0; } 
     
     .gradient-text {
         background: linear-gradient(45deg, #f59e0b, #fbbf24);
@@ -152,13 +170,6 @@ CUSTOM_CSS = """
         border: 1px solid rgba(255,255,255,0.05);
         border-radius: 12px;
         color: white;
-    }
-    div[data-testid="stExpander"] p {
-        font-family: 'Vazirmatn', sans-serif !important;
-    }
-    /* رفع مشکل آیکون اکسپندر */
-    div[data-testid="stExpander"] summary span {
-        font-family: inherit !important;
     }
 </style>
 """
