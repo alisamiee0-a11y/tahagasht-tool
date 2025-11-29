@@ -14,12 +14,17 @@ CUSTOM_CSS = """
     /* لینک مستقیم و پایدار گوگل فونت (وزیرمتن) */
     @import url('https://fonts.googleapis.com/css2?family=Vazirmatn:wght@100..900&display=swap');
 
-    /* 1. تنظیمات کلی بدنه (تم تیره) - اعمال اجباری فونت */
-    html, body, [class*="css"], .stApp, button, input, textarea, div, span, p, h1, h2, h3, h4, h5, h6, .stMarkdown, .stText, .stCode {
+    /* 1. تنظیمات فونت هوشمند (اصلاح شده برای رفع باگ آیکون‌ها) */
+    /* فونت را فقط به المان‌های متنی اصلی می‌دهیم، نه همه چیز (div/span) */
+    html, body, .stApp {
+        font-family: 'Vazirmatn', sans-serif !important;
+    }
+    
+    h1, h2, h3, h4, h5, h6, p, li, a, button, input, textarea, label, .stMarkdown, .stText, .stCode {
         font-family: 'Vazirmatn', sans-serif !important;
         direction: rtl;
     }
-    
+
     /* حذف هدر و فوتر پیش‌فرض */
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
@@ -51,7 +56,7 @@ CUSTOM_CSS = """
 
     /* 3. تایپوگرافی */
     h1, h2, h3 { color: #ffffff !important; font-weight: 800 !important; }
-    p, label, span, div { color: #e2e8f0 !important; }
+    p, label, span, div { color: #e2e8f0; } /* div و span بدون important برای حفظ آیکون‌ها */
     
     .gradient-text {
         background: linear-gradient(45deg, #f59e0b, #fbbf24);
@@ -150,6 +155,10 @@ CUSTOM_CSS = """
     }
     div[data-testid="stExpander"] p {
         font-family: 'Vazirmatn', sans-serif !important;
+    }
+    /* رفع مشکل آیکون اکسپندر */
+    div[data-testid="stExpander"] summary span {
+        font-family: inherit !important;
     }
 </style>
 """
