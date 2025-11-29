@@ -69,7 +69,7 @@ def analyze_with_gemini(text, year, api_key):
 
     # انتخاب مدل (Flash برای سرعت و قیمت عالی است)
     model = genai.GenerativeModel(
-        model_name="gemini-1.5-flash-latest",
+        model_name="gemini-1.5-flash",
         system_instruction=system_instruction,
         generation_config={"response_mime_type": "application/json"} # تضمین خروجی JSON
     )
@@ -123,3 +123,4 @@ if uploaded_file and st.button("شروع پردازش با Gemini"):
             except Exception as e:
 
                 st.error(f"خطا در ارتباط با گوگل: {e}")
+
