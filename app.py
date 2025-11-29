@@ -15,7 +15,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-st.title("💎 تبدیل هوشمند پکیج (با موتور Gemini)")
+st.title("💎 تبدیل هوشمند پکیج (با موتور Gemini 2.5)")
 
 # --- سایدبار ---
 with st.sidebar:
@@ -30,18 +30,18 @@ with st.sidebar:
         api_key = st.text_input("کلید API گوگل (Gemini) را وارد کنید", type="password")
 
     st.divider()
-    # دکمه عیب‌یابی برای دیدن مدل‌های فعال
-    if st.button("🔍 تست اتصال و نمایش مدل‌ها"):
-        if not api_key:
-            st.error("کلید API وارد نشده است.")
-        else:
-            try:
-                genai.configure(api_key=api_key)
-                st.info("در حال دریافت لیست مدل‌های مجاز...")
-                models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
-                st.code(models)
-            except Exception as e:
-                st.error(f"خطا: {e}")
+    # دکمه عیب‌یابی (کوچک شده)
+    with st.expander("🛠️ ابزار عیب‌یابی"):
+        if st.button("نمایش مدل‌های فعال"):
+            if not api_key:
+                st.error("کلید موجود نیست")
+            else:
+                try:
+                    genai.configure(api_key=api_key)
+                    models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+                    st.code(models)
+                except Exception as e:
+                    st.error(f"خطا: {e}")
 
 # --- تابع استخراج متن ---
 def extract_text_from_pdf(file):
@@ -53,7 +53,7 @@ def extract_text_from_pdf(file):
                 text += extracted + "\n"
     return text
 
-# --- تابع اتصال به Gemini با مکانیزم فال‌بک (Fallback) ---
+# --- تابع اتصال به Gemini با مدل‌های جدید ---
 def analyze_with_gemini(text, year, api_key):
     genai.configure(api_key=api_key)
     
@@ -79,13 +79,12 @@ def analyze_with_gemini(text, year, api_key):
     }}
     """
 
-    # لیست مدل‌هایی که به ترتیب امتحان می‌شوند تا یکی کار کند
+    # لیست مدل‌های موجود در اکانت شما (آپدیت شده)
     candidate_models = [
-        "gemini-1.5-flash",
-        "gemini-1.5-flash-latest",
-        "gemini-1.5-flash-001",
-        "gemini-1.5-pro",
-        "gemini-pro"
+        "gemini-2.5-flash",          # انتخاب اول: جدیدترین و سریعترین
+        "gemini-flash-latest",       # انتخاب دوم: نسخه پایدار
+        "gemini-2.0-flash",          # انتخاب سوم
+        "gemini-pro-latest"          # انتخاب آخر
     ]
 
     last_error = None
@@ -106,7 +105,8 @@ def analyze_with_gemini(text, year, api_key):
             return json.loads(response.text)
             
         except Exception as e:
-            # اگر خطا داد، مدل بعدی را امتحان می‌کنیم
+            # لاگ کردن خطای مدل فعلی (برای دیباگ در کنسول سرور)
+            print(f"Model {model_name} failed: {e}")
             last_error = e
             continue
     
@@ -154,4 +154,3 @@ if uploaded_file and st.button("شروع پردازش"):
             
             except Exception as e:
                 st.error(f"خطا در پردازش: {e}")
-                st.warning("پیشنهاد: از دکمه «تست اتصال» در منوی سمت راست استفاده کنید تا مطمئن شوید کلید شما سالم است.")
