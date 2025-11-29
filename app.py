@@ -33,34 +33,39 @@ with st.sidebar:
 def analyze_pdf_directly(file_bytes, year, api_key):
     genai.configure(api_key=api_key)
     
-    # دستورالعمل سیستم
+    # دستورالعمل سیستم (آپدیت شده برای استخراج خدمات و متن کامل)
     system_instruction = f"""
     You are an AI assistant for "TahaGasht" travel agency.
     Target Year: {year}
     
-    Task: Look at the provided PDF document. Extract:
+    Task: Look at the provided PDF document. Extract the following sections clearly:
     1. Tour Title
     2. Flight departure date (Convert extracted Persian date to Gregorian YYYY-MM-DD).
-    3. Daily Itinerary (Map each day to a Gregorian date).
+    3. Services Section (خدمات): Extract the full text of included services.
+    4. Flight Details Section (اطلاعات پرواز): Extract the full text of flight details.
+    5. Daily Itinerary (Map each day to a Gregorian date).
+    6. Full Clean Text: Extract all text content from the PDF in a clean, structured format suitable for copying.
     
     Output Format: ONLY valid JSON.
     Structure:
     {{
       "tour_title": "string",
       "flight_info": {{ "shamsi": "string", "gregorian": "YYYY-MM-DD" }},
+      "services_text": "string (full text of services)",
+      "flight_details_text": "string (full text of flight info)",
+      "full_pdf_text": "string (entire content of pdf cleaned)",
       "itinerary": [
         {{ "day_number": 1, "date_gregorian": "YYYY-MM-DD", "day_title": "string", "content_summary": "string" }}
       ]
     }}
     """
 
-    # لیست اولویت‌بندی شده مدل‌ها (بر اساس لیست مجاز شما)
-    # مدل 2.5 فلش اولویت دارد چون پایدارتر است
+    # لیست اولویت‌بندی شده مدل‌ها
     candidate_models = [
-        "gemini-2.5-flash",          # بهترین گزینه فعلی
-        "gemini-flash-latest",       # فال‌بک مطمئن
-        "gemini-2.0-flash-exp",      # آزمایشی (ممکن است محدود باشد)
-        "gemini-1.5-pro-latest"      # آخرین سنگر
+        "gemini-2.5-flash",
+        "gemini-flash-latest",
+        "gemini-2.0-flash-exp",
+        "gemini-1.5-pro-latest"
     ]
     
     # ساخت پکیج دیتا برای ارسال مستقیم PDF
@@ -89,20 +94,18 @@ def analyze_pdf_directly(file_bytes, year, api_key):
             error_str = str(e)
             last_error = e
             
-            # اگر خطای محدودیت (429) بود، کمی صبر کن و برو بعدی
+            # مدیریت خطای محدودیت (429)
             if "429" in error_str or "Quota" in error_str:
-                time.sleep(2) # 2 ثانیه استراحت
+                time.sleep(2)
                 continue
             
-            # اگر خطای پیدا نشدن مدل (404) بود، سریع برو بعدی
+            # مدیریت خطای مدل (404)
             if "404" in error_str or "not found" in error_str:
                 continue
                 
-            # سایر خطاها
             print(f"Model {model_name} failed: {e}")
             continue
 
-    # اگر هیچکدام کار نکرد
     return f"ERROR: All models failed. Last error: {str(last_error)}"
 
 # --- بدنه اصلی ---
@@ -112,20 +115,16 @@ if uploaded_file and st.button("شروع پردازش"):
     if not api_key:
         st.error("کلید API وارد نشده است.")
     else:
-        with st.spinner('در حال مشاهده و آنالیز فایل (ممکن است کمی بیشتر طول بکشد)...'):
+        with st.spinner('در حال آنالیز کامل PDF (خدمات، پرواز و برنامه سفر)...'):
             try:
-                # خواندن بایت‌های فایل
                 file_bytes = uploaded_file.getvalue()
-                
-                # ارسال مستقیم به هوش مصنوعی
                 raw_response = analyze_pdf_directly(file_bytes, target_year, api_key)
                 
-                # تلاش برای پارس کردن JSON
                 try:
                     data = json.loads(raw_response)
-                    st.success("✅ پردازش موفق با تکنولوژی ویژن!")
+                    st.success("✅ پردازش کامل انجام شد!")
                     
-                    # نمایش خروجی
+                    # هدر
                     col1, col2 = st.columns([3, 1])
                     with col1:
                         st.subheader(f"🏷️ {data.get('tour_title', 'عنوان یافت نشد')}")
@@ -133,24 +132,44 @@ if uploaded_file and st.button("شروع پردازش"):
                         fl = data.get('flight_info', {})
                         st.info(f"پرواز: {fl.get('shamsi', '-')} \n({fl.get('gregorian', '-')})")
                     
-                    final_text = ""
-                    for day in data.get('itinerary', []):
-                        d_date = day.get('date_gregorian', '-')
-                        d_title = day.get('day_title', '')
-                        d_content = day.get('content_summary', '')
-                        
-                        with st.expander(f"روز {day.get('day_number')}: {d_title}"):
-                            st.write(d_content)
-                        
-                        final_text += f"📅 {d_date} | {d_title}\n{d_content}\n\n"
+                    # --- تب‌بندی بخش‌های مختلف ---
+                    tab_itinerary, tab_services, tab_full_text = st.tabs(["📅 برنامه سفر (روزانه)", "✈️ خدمات و پرواز", "📄 متن کامل PDF"])
                     
-                    st.text_area("متن نهایی برای کپی:", value=final_text, height=600)
+                    # تب ۱: برنامه سفر
+                    with tab_itinerary:
+                        final_text = ""
+                        for day in data.get('itinerary', []):
+                            d_date = day.get('date_gregorian', '-')
+                            d_title = day.get('day_title', '')
+                            d_content = day.get('content_summary', '')
+                            
+                            with st.expander(f"روز {day.get('day_number')}: {d_title}"):
+                                st.write(d_content)
+                            
+                            final_text += f"📅 {d_date} | {d_title}\n{d_content}\n\n"
+                        
+                        st.text_area("متن برنامه سفر (آماده کپی):", value=final_text, height=500)
+                    
+                    # تب ۲: خدمات و اطلاعات پرواز
+                    with tab_services:
+                        col_serv, col_flight = st.columns(2)
+                        with col_serv:
+                            st.subheader("لیست خدمات")
+                            st.text_area("متن خدمات:", value=data.get('services_text', 'پیدا نشد'), height=300)
+                        
+                        with col_flight:
+                            st.subheader("جزئیات پرواز")
+                            st.text_area("متن پرواز:", value=data.get('flight_details_text', 'پیدا نشد'), height=300)
+
+                    # تب ۳: متن کامل
+                    with tab_full_text:
+                        st.warning("در اینجا متن کل فایل PDF به صورت یکجا استخراج شده است:")
+                        st.text_area("متن خام کل فایل:", value=data.get('full_pdf_text', ''), height=600)
                     
                 except json.JSONDecodeError:
                     st.error("❌ خطا در فرمت خروجی")
                     if "ERROR:" in raw_response:
                         st.error(raw_response)
-                        st.info("نکته: خطای Quota یعنی درخواست‌های زیادی ارسال شده. چند لحظه صبر کنید و دوباره امتحان کنید.")
                     else:
                         st.code(raw_response)
                         
